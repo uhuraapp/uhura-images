@@ -22,13 +22,14 @@ func main() {
 	e := echo.New()
 	e.Use(mw.Logger)
 
-	e.Post("/cache", createImage)
-	e.Get("/cache/:id", getImage)
+	e.Post("/cache", create)
+	e.Get("/cache/:id", get)
+	e.Get("/resolve", resolve)
 
 	e.Run(":" + os.Getenv("PORT"))
 }
 
-func getImage(c *echo.Context) {
+func get(c *echo.Context) {
 	var image database.Image
 
 	DB.Table("images").Where("id = ?", c.P(0)).Find(&image)
@@ -36,7 +37,7 @@ func getImage(c *echo.Context) {
 	c.Response.Write(image.Data)
 }
 
-func createImage(c *echo.Context) {
+func create(c *echo.Context) {
 	imageURL := c.Request.FormValue("url")
 	if imageURL == "" {
 		// error
@@ -47,20 +48,29 @@ func createImage(c *echo.Context) {
 		// notifyWrongImage
 	}
 
-	image, err := imageproxy.Transform(originalImage, resizeOptions())
-	if err != nil {
-		log.Println(err)
-
-	}
-
-	imageSaved := database.Image{
-		Url:  imageURL,
-		Data: image,
-	}
-
-	DB.Table("images").FirstOrCreate(&imageSaved)
+	imageSaved := save(imageURL, originalImage)
 
 	c.JSON(200, imageSaved.Id)
+}
+
+func resolve(c *echo.Context) {
+	var image database.Image
+
+	url := c.Request.URL.Query().Get("url")
+
+	err := DB.Table("images").Where("url = ?", url).Find(&image).Error
+	if err != nil {
+		originalImage, err2 := requestURL(url)
+		if err2 != nil {
+			// notifyWrongImage
+		}
+		save(url, originalImage)
+
+		c.Response.Write(originalImage)
+		return
+	}
+
+	c.Response.Write(image.Data)
 }
 
 func requestURL(url string) ([]byte, error) {
@@ -80,4 +90,22 @@ func requestURL(url string) ([]byte, error) {
 
 func resizeOptions() imageproxy.Options {
 	return imageproxy.ParseOptions("250x")
+}
+
+func save(url string, image []byte) database.Image {
+	newimage, err := imageproxy.Transform(image, resizeOptions())
+
+	if err != nil {
+		log.Println(err)
+	}
+
+	imageSaved := database.Image{
+		Url:  url,
+		Data: newimage,
+	}
+
+	log.Println("Saving image")
+	log.Println(DB.Table("images").Where("url = ?", url).FirstOrCreate(&imageSaved).Error)
+
+	return imageSaved
 }
