@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 
 	"github.com/jinzhu/gorm"
@@ -16,11 +17,21 @@ import (
 
 var DB gorm.DB
 
+func cors(rw http.ResponseWriter, r *http.Request) {
+	referer, _ := url.Parse(r.Referer())
+	rw.Header().Set("Access-Control-Allow-Origin", referer.Scheme+"://"+referer.Host)
+	rw.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	rw.Header().Set("Access-Control-Allow-Credentials", "true")
+	rw.Header().Set("Access-Control-Allow-Methods", "DELETE, OPTIONS, GET, POST, PUT")
+	rw.Header().Set("Access-Control-Expose-Headers", "Content-Length")
+}
+
 func main() {
 	DB = database.NewPostgresql()
 
 	e := echo.New()
 	e.Use(mw.Logger)
+	e.Use(cors)
 
 	e.Post("/cache", create)
 	e.Get("/cache/:id", get)
@@ -88,10 +99,6 @@ func requestURL(url string) ([]byte, error) {
 	return body, err
 }
 
-func resizeOptions() imageproxy.Options {
-	return imageproxy.ParseOptions("250x")
-}
-
 func save(url string, image []byte) database.Image {
 	newimage, err := imageproxy.Transform(image, resizeOptions())
 
@@ -108,4 +115,8 @@ func save(url string, image []byte) database.Image {
 	log.Println(DB.Table("images").Where("url = ?", url).FirstOrCreate(&imageSaved).Error)
 
 	return imageSaved
+}
+
+func resizeOptions() imageproxy.Options {
+	return imageproxy.ParseOptions("250x")
 }
