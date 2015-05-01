@@ -7,29 +7,34 @@ import (
 )
 
 func TestResponse(t *testing.T) {
-	e := New()
-	e.Get("/hello", func(c *Context) {
-		c.String(http.StatusOK, "world")
+	r := &response{Writer: httptest.NewRecorder()}
 
-		// Status
-		if c.Response.Status() != http.StatusOK {
-			t.Error("status code should be 200")
-		}
+	// Header
+	if r.Header() == nil {
+		t.Error("header should not be nil")
+	}
 
-		// Size
-		if c.Response.Status() != http.StatusOK {
-			t.Error("size should be 5")
-		}
+	// WriteHeader
+	r.WriteHeader(http.StatusOK)
+	if r.status != http.StatusOK {
+		t.Errorf("status should be %d", http.StatusOK)
+	}
+	if r.committed != true {
+		t.Error("response should be true")
+	}
+	// Response already committed
+	r.WriteHeader(http.StatusOK)
 
-		// TODO: fix us later
-		c.Response.CloseNotify()
-		c.Response.Flusher()
-		c.Response.Hijack()
+	// Status
+	r.status = http.StatusOK
+	if r.Status() != http.StatusOK {
+		t.Errorf("status should be %d", http.StatusOK)
+	}
 
-		// Reset
-		c.Response.reset(c.Response.ResponseWriter)
-	})
-	w := httptest.NewRecorder()
-	r, _ := http.NewRequest("GET", "/hello", nil)
-	e.ServeHTTP(w, r)
+	// Write & Size
+	s := "echo"
+	r.Write([]byte(s))
+	if r.Size() != len(s) {
+		t.Errorf("size should be %d", len(s))
+	}
 }

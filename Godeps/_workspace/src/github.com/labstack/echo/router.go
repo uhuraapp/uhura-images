@@ -8,26 +8,25 @@ type (
 		echo  *Echo
 	}
 	node struct {
-		label   byte
-		prefix  string
-		has     ntype // Type of node it contains
+		typ      ntype
+		label    byte
+		prefix   string
+		parent   *node
+		children children
+		// pchild   *node // Param child
+		// mchild   *node // Match-any child
 		handler HandlerFunc
+		pnames  []string
 		echo    *Echo
-		edges   edges
 	}
-	edges []*node
-	ntype byte
-	param struct {
-		Name  string
-		Value string
-	}
-	Params []param
+	ntype    uint8
+	children []*node
 )
 
 const (
-	snode ntype = iota // Static node
-	pnode              // Param node
-	anode              // Catch-all node
+	stype ntype = iota
+	ptype
+	mtype
 )
 
 func NewRouter(e *Echo) (r *router) {
@@ -37,34 +36,43 @@ func NewRouter(e *Echo) (r *router) {
 	}
 	for _, m := range methods {
 		r.trees[m] = &node{
-			prefix: "",
-			edges:  edges{},
+			prefix:   "",
+			children: children{},
 		}
 	}
 	return
 }
 
 func (r *router) Add(method, path string, h HandlerFunc, echo *Echo) {
-	i := 0
-	l := len(path)
-	for ; i < l; i++ {
+	var pnames []string // Param names
+
+	for i, l := 0, len(path); i < l; i++ {
 		if path[i] == ':' {
-			r.insert(method, path[:i], nil, echo, pnode)
+			j := i + 1
+
+			r.insert(method, path[:i], nil, stype, nil, echo)
 			for ; i < l && path[i] != '/'; i++ {
 			}
+
+			pnames = append(pnames, path[j:i])
+			path = path[:j] + path[i:]
+			i, l = j, len(path)
+
 			if i == l {
-				r.insert(method, path[:i], h, echo, snode)
+				r.insert(method, path[:i], h, ptype, pnames, echo)
 				return
 			}
-			r.insert(method, path[:i], nil, echo, snode)
+			r.insert(method, path[:i], nil, ptype, pnames, echo)
 		} else if path[i] == '*' {
-			r.insert(method, path[:i], h, echo, anode)
+			pnames = append(pnames, "_name")
+			r.insert(method, path[:i], h, mtype, pnames, echo)
+			return
 		}
 	}
-	r.insert(method, path, h, echo, snode)
+	r.insert(method, path, h, stype, nil, echo)
 }
 
-func (r *router) insert(method, path string, h HandlerFunc, echo *Echo, has ntype) {
+func (r *router) insert(method, path string, h HandlerFunc, t ntype, pnames []string, echo *Echo) {
 	cn := r.trees[method] // Current node as root
 	search := path
 
@@ -77,71 +85,123 @@ func (r *router) insert(method, path string, h HandlerFunc, echo *Echo, has ntyp
 			// At root node
 			cn.label = search[0]
 			cn.prefix = search
-			cn.has = has
 			if h != nil {
+				cn.typ = t
 				cn.handler = h
+				cn.pnames = pnames
 				cn.echo = echo
 			}
-			return
 		} else if l < pl {
-			// Split the node
-			n := newNode(cn.prefix[l:], cn.has, cn.handler, cn.echo, cn.edges)
-			cn.edges = edges{n} // Add to parent
+			// Split node
+			n := newNode(cn.typ, cn.prefix[l:], cn, cn.children, cn.handler, cn.pnames, cn.echo)
+			cn.children = children{n} // Add to parent
+			// if n.typ == ptype {
+			// cn.pchild = n
+			// } else if n.typ == ctype {
+			// cn.cchild = n
+			// }
 
 			// Reset parent node
+			cn.typ = stype
 			cn.label = cn.prefix[0]
 			cn.prefix = cn.prefix[:l]
-			cn.has = snode
+			// cn.pchild = nil
+			// cn.cchild = nil
 			cn.handler = nil
+			cn.pnames = nil
 			cn.echo = nil
 
 			if l == sl {
 				// At parent node
+				cn.typ = t
 				cn.handler = h
+				cn.pnames = pnames
 				cn.echo = echo
 			} else {
-				// Need to fork a node
-				n = newNode(search[l:], has, h, echo, edges{})
-				cn.edges = append(cn.edges, n)
+				// Create child node
+				n = newNode(t, search[l:], cn, children{}, h, pnames, echo)
+				cn.children = append(cn.children, n)
+				// if n.typ == ptype {
+				// cn.pchild = n
+				// } else if n.typ == ctype {
+				// cn.cchild = n
+				// }
 			}
-			break
 		} else if l < sl {
 			search = search[l:]
-			e := cn.findEdge(search[0])
-			if e == nil {
-				n := newNode(search, has, h, echo, edges{})
-				cn.edges = append(cn.edges, n)
-				break
-			} else {
-				cn = e
+			c := cn.findChild(search[0])
+			if c != nil {
+				// Go deeper
+				cn = c
+				continue
 			}
+			// Create child node
+			n := newNode(t, search, cn, children{}, h, pnames, echo)
+			cn.children = append(cn.children, n)
+			// if n.typ == ptype {
+			// cn.pchild = n
+			// } else if n.typ == ctype {
+			// cn.cchild = n
+			// }
 		} else {
 			// Node already exists
 			if h != nil {
 				cn.handler = h
+				cn.pnames = pnames
 				cn.echo = echo
 			}
-			break
+		}
+		return
+	}
+}
+
+func newNode(t ntype, pfx string, p *node, c children, h HandlerFunc, pnames []string, echo *Echo) *node {
+	return &node{
+		typ:      t,
+		label:    pfx[0],
+		prefix:   pfx,
+		parent:   p,
+		children: c,
+		handler:  h,
+		pnames:   pnames,
+		echo:     echo,
+	}
+}
+
+func (n *node) addChild(c *node) {
+}
+
+func (n *node) findChild(l byte) *node {
+	for _, c := range n.children {
+		if c.label == l {
+			return c
 		}
 	}
+	return nil
 }
 
-func newNode(pfx string, has ntype, h HandlerFunc, echo *Echo, e edges) (n *node) {
-	n = &node{
-		label:   pfx[0],
-		prefix:  pfx,
-		has:     has,
-		handler: h,
-		echo:    echo,
-		edges:   e,
+func (n *node) findSchild(l byte) *node {
+	for _, c := range n.children {
+		if c.label == l && c.typ == stype {
+			return c
+		}
 	}
-	return
+	return nil
 }
 
-func (n *node) findEdge(l byte) *node {
-	for _, e := range n.edges {
-		if e.label == l {
-			return e
+func (n *node) findPchild() *node {
+	for _, c := range n.children {
+		if c.typ == ptype {
+			return c
+		}
+	}
+	return nil
+}
+
+func (n *node) findMchild() *node {
+	for _, c := range n.children {
+		if c.typ == mtype {
+			return c
 		}
 	}
 	return nil
@@ -159,17 +219,26 @@ func lcp(a, b string) (i int) {
 	return
 }
 
-func (r *router) Find(method, path string) (h HandlerFunc, c *Context, echo *Echo) {
-	c = r.echo.pool.Get().(*Context)
+func (r *router) Find(method, path string, ctx *Context) (h HandlerFunc, echo *Echo) {
 	cn := r.trees[method] // Current node as root
 	search := path
-	n := 0 // Param count
+	c := new(node) // Child node
+	n := 0         // Param counter
 
+	// Search order static > param > match-any
 	for {
-		if search == "" || search == cn.prefix {
+		// TODO flip condition???
+		if search == "" || search == cn.prefix || cn.typ == mtype {
 			// Found
 			h = cn.handler
 			echo = cn.echo
+			ctx.pnames = cn.pnames
+
+			// Match-any node
+			if cn.typ == mtype {
+				ctx.pvalues[0] = search[len(cn.prefix):]
+			}
+
 			return
 		}
 
@@ -178,57 +247,59 @@ func (r *router) Find(method, path string) (h HandlerFunc, c *Context, echo *Ech
 
 		if l == pl {
 			search = search[l:]
-			switch cn.has {
-			case pnode:
-				cn = cn.edges[0]
-				i := 0
-				l = len(search)
+		} else if l < pl && cn.label != ':' {
+			goto Up
+		}
 
-				for ; i < l && search[i] != '/'; i++ {
-				}
-				p := c.params[:n+1]
-				p[n].Name = cn.prefix[1:]
-				p[n].Value = search[:i]
-				n++
-
-				search = search[i:]
-
-				if i == l {
-					// All params read
-					continue
-				}
-			case anode:
-				p := c.params[:n+1]
-				p[n].Name = "_name"
-				p[n].Value = search
-				search = "" // End search
-				continue
-			}
-			e := cn.findEdge(search[0])
-			if e == nil {
-				// Not found
-				return
-			}
-			cn = e
+		// Static node
+		c = cn.findSchild(search[0])
+		if c != nil {
+			cn = c
 			continue
 		}
-		return
-	}
-}
 
-// Get returns path parameter by name.
-func (ps Params) Get(n string) (v string) {
-	for _, p := range ps {
-		if p.Name == n {
-			v = p.Value
+		// Param node
+	Param:
+		c = cn.findPchild()
+		// c = cn.pchild
+		if c != nil {
+			cn = c
+			i, l := 0, len(search)
+			for ; i < l && search[i] != '/'; i++ {
+			}
+			ctx.pvalues[n] = search[:i]
+			n++
+			search = search[i:]
+			continue
 		}
+
+		// Match-any
+		c = cn.findMchild()
+		if c != nil {
+			cn = c
+			continue
+		}
+
+	Up:
+		tn := cn // Save current node
+		cn = cn.parent
+		if cn == nil {
+			// Not found
+			return
+		}
+		// Search upwards
+		if l == pl {
+			// Reset search
+			search = tn.prefix + search
+		}
+		goto Param
 	}
-	return
 }
 
-func (r *router) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
-	h, c, _ := r.Find(req.Method, req.URL.Path)
-	c.Response.ResponseWriter = rw
+func (r *router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	c := r.echo.pool.Get().(*Context)
+	h, _ := r.Find(req.Method, req.URL.Path, c)
+	c.reset(w, req, nil)
 	if h != nil {
 		h(c)
 	} else {

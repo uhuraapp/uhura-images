@@ -1,141 +1,41 @@
-# Echo [![GoDoc](http://img.shields.io/badge/go-documentation-blue.svg?style=flat-square)](http://godoc.org/github.com/labstack/echo) [![Build Status](http://img.shields.io/travis/labstack/echo.svg?style=flat-square)](https://travis-ci.org/labstack/echo) [![Coverage Status](http://img.shields.io/coveralls/labstack/echo.svg?style=flat-square)](https://coveralls.io/r/labstack/echo)
-Echo is a fast HTTP router (zero memory allocation) + micro web framework in Go.
+# [Echo](http://labstack.github.io/echo) [![GoDoc](http://img.shields.io/badge/go-documentation-blue.svg?style=flat-square)](http://godoc.org/github.com/labstack/echo) [![Build Status](http://img.shields.io/travis/labstack/echo.svg?style=flat-square)](https://travis-ci.org/labstack/echo) [![Coverage Status](http://img.shields.io/coveralls/labstack/echo.svg?style=flat-square)](https://coveralls.io/r/labstack/echo)
+Echo is a fast HTTP router (zero memory allocation) and micro web framework in Go.
 
-### Features
-- Zippy router.
+## Features
+
+- Fast :rocket: HTTP router which smartly resolves conflicting routes.
+- Fast router which smartly resolves conflicting routes.
 - Extensible middleware/handler, supports:
 	- Middleware
 		- `func(*echo.Context)`
+		- `func(*echo.Context) error`
 		- `func(echo.HandlerFunc) echo.HandlerFunc`
 		- `func(http.Handler) http.Handler`
 		- `http.Handler`
 		- `http.HandlerFunc`
 		- `func(http.ResponseWriter, *http.Request)`
+		- `func(http.ResponseWriter, *http.Request) error`
 	- Handler
+		- `echo.HandlerFunc`
+		- `func(*echo.Context) error`
 		- `func(*echo.Context)`
 		- `http.Handler`
 		- `http.HandlerFunc`
 		- `func(http.ResponseWriter, *http.Request)`
-- Sub/Group routing
+		- `func(http.ResponseWriter, *http.Request) error`
+- Sub routing with groups.
 - Handy encoding/decoding functions.
 - Serve static files, including index.
+- Centralized HTTP error handling.
+- Use a customized function to bind request body to a Go type.
+- Register a view render so you can use any HTML template engine.
 
-### Installation
-```go get github.com/labstack/echo```
+## Benchmark
 
-### Usage
-[labstack/echo/example](https://github.com/labstack/echo/tree/master/example)
-
-```go
-package main
-
-import (
-	"net/http"
-
-	"github.com/labstack/echo"
-	mw "github.com/labstack/echo/middleware"
-	"github.com/rs/cors"
-	"github.com/thoas/stats"
-)
-
-type user struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-}
-
-var users map[string]user
-
-func init() {
-	users = map[string]user{
-		"1": user{
-			ID:   "1",
-			Name: "Wreck-It Ralph",
-		},
-	}
-}
-
-func createUser(c *echo.Context) {
-	u := new(user)
-	if err := c.Bind(u); err == nil {
-		users[u.ID] = *u
-		if err := c.JSON(http.StatusCreated, u); err == nil {
-			// Do something!
-		}
-		return
-	}
-	http.Error(c.Response, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-}
-
-func getUsers(c *echo.Context) {
-	c.JSON(http.StatusOK, users)
-}
-
-func getUser(c *echo.Context) {
-	c.JSON(http.StatusOK, users[c.P(0)])
-}
-
-func main() {
-	e := echo.New()
-
-	//*************************//
-	//   Built-in middleware   //
-	//*************************//
-	e.Use(mw.Logger)
-
-	//****************************//
-	//   Third-party middleware   //
-	//****************************//
-	// https://github.com/rs/cors
-	e.Use(cors.Default().Handler)
-
-	// https://github.com/thoas/stats
-	s := stats.New()
-	e.Use(s.Handler)
-	// Route
-	e.Get("/stats", func(c *echo.Context) {
-		c.JSON(200, s.Data())
-	})
-
-	// Serve index file
-	e.Index("public/index.html")
-
-	// Serve static files
-	e.Static("/js", "public/js")
-
-	//************//
-	//   Routes   //
-	//************//
-	e.Post("/users", createUser)
-	e.Get("/users", getUsers)
-	e.Get("/users/:id", getUser)
-
-	//****************//
-	//   Sub router   //
-	//****************//
-	// Sub - inherits parent middleware
-	sub := e.Sub("/sub")
-	sub.Use(func(c *echo.Context) { // Middleware
-	})
-	sub.Get("/home", func(c *echo.Context) {
-		c.String(200, "Sub route /sub/welcome")
-	})
-
-	// Group - doesn't inherit parent middleware
-	grp := e.Group("/group")
-	grp.Use(func(c *echo.Context) { // Middleware
-	})
-	grp.Get("/home", func(c *echo.Context) {
-		c.String(200, "Group route /group/welcome")
-	})
-
-	// Start server
-	e.Run(":8080")
-}
-```
-
-### Benchmark
 Based on [julienschmidt/go-http-routing-benchmark] (https://github.com/vishr/go-http-routing-benchmark), April 1, 2015
+
 ##### [GitHub API](http://developer.github.com/v3)
+
 > Echo: 42728 ns/op, 0 B/op, 0 allocs/op
 
 ```
@@ -165,3 +65,63 @@ BenchmarkTraffic_GithubAll	     200	   7540377 ns/op	 2664762 B/op	   22390 allo
 BenchmarkVulcan_GithubAll	    5000	    307241 ns/op	   19894 B/op	     609 allocs/op
 BenchmarkZeus_GithubAll	        2000	    752907 ns/op	  300688 B/op	    2648 allocs/op
 ```
+
+## Installation
+
+```sh
+$ go get github.com/labstack/echo
+```
+
+##[Hello, World!](https://github.com/labstack/echo/tree/master/examples/hello)
+
+```go
+package main
+
+import (
+	"net/http"
+
+	"github.com/labstack/echo"
+	mw "github.com/labstack/echo/middleware"
+)
+
+// Handler
+func hello(c *echo.Context) {
+	c.String(http.StatusOK, "Hello, World!\n")
+}
+
+func main() {
+	// Echo instance
+	e := echo.New()
+
+	// Middleware
+	e.Use(mw.Logger)
+
+	// Routes
+	e.Get("/", hello)
+
+	// Start server
+	e.Run(":4444")
+}
+```
+
+##[Examples](https://github.com/labstack/echo/tree/master/examples)
+
+##[Guide](http://labstack.github.io/echo/guide)
+
+## Contribute
+
+**Use issues for everything**
+
+- Report problems
+- Discuss before sending pull request
+- Suggest new features
+- Improve/fix documentation
+
+## Credits
+- [Vishal Rana](https://github.com/vishr) - Author
+- [Nitin Rana](https://github.com/nr17) - Consultant
+- [Contributors](https://github.com/labstack/echo/graphs/contributors)
+
+## License
+
+[MIT](https://github.com/labstack/echo/blob/master/LICENSE)
