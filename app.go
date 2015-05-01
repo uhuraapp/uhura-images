@@ -35,7 +35,6 @@ func main() {
 	e.Use(mw.Logger)
 	e.Use(cors)
 
-	// e.Post("/cache", create)
 	e.Get("/cache/:id", get)
 	e.Get("/resolve", resolve)
 
@@ -57,22 +56,6 @@ func get(c *echo.Context) error {
 	c.Response.Write(image.Data)
 	return nil
 }
-
-// func create(c *echo.Context) {
-// 	imageURL := c.Request.FormValue("url")
-// 	if imageURL == "" {
-// 		// error
-// 	}
-//
-// 	originalImage, err := requestURL(imageURL)
-// 	if err != nil {
-// 		// notifyWrongImage
-// 	}
-//
-// 	imageSaved, _ := save(imageURL, originalImage)
-//
-// 	c.JSON(200, imageSaved.Id)
-// }
 
 func resolve(c *echo.Context) error {
 	var id int64
