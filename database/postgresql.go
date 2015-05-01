@@ -3,6 +3,7 @@ package database
 import (
 	"log"
 	"os"
+	"time"
 
 	"github.com/jinzhu/gorm"
 	pq "github.com/lib/pq"
@@ -39,7 +40,8 @@ func Migrations(database gorm.DB) {
 }
 
 type Image struct {
-	Id   int64
-	Url  string `sql:"unique"`
-	Data []byte `sql:"type:bytea"`
+	Id        int64
+	Url       string `sql:"unique"`
+	Data      []byte `sql:"type:bytea"`
+	UpdatedAt time.Time
 }

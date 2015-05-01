@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/jinzhu/gorm"
 	"github.com/labstack/echo"
@@ -49,6 +50,9 @@ func get(c *echo.Context) error {
 	if err != nil {
 		return c.NoContent(http.StatusNotFound)
 	}
+
+	c.Response.Header().Add("Cache-Control", "public, max-age=31536000");
+	c.Response.Header().Add("Last-Modified", image.UpdatedAt.Format(time.RFC822));
 
 	c.Response.Write(image.Data)
 	return nil
