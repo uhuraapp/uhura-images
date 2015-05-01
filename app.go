@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 
 	"github.com/jinzhu/gorm"
 	"github.com/labstack/echo"
@@ -33,55 +34,70 @@ func main() {
 	e.Use(mw.Logger)
 	e.Use(cors)
 
-	e.Post("/cache", create)
+	// e.Post("/cache", create)
 	e.Get("/cache/:id", get)
 	e.Get("/resolve", resolve)
 
 	e.Run(":" + os.Getenv("PORT"))
 }
 
-func get(c *echo.Context) {
+func get(c *echo.Context) error {
 	var image database.Image
 
-	DB.Table("images").Where("id = ?", c.P(0)).Find(&image)
+	err := DB.Table("images").Where("id = ?", c.P(0)).Find(&image).Error
+
+	if err != nil {
+		return c.NoContent(http.StatusNotFound)
+	}
 
 	c.Response.Write(image.Data)
+	return nil
 }
 
-func create(c *echo.Context) {
-	imageURL := c.Request.FormValue("url")
-	if imageURL == "" {
-		// error
-	}
+// func create(c *echo.Context) {
+// 	imageURL := c.Request.FormValue("url")
+// 	if imageURL == "" {
+// 		// error
+// 	}
+//
+// 	originalImage, err := requestURL(imageURL)
+// 	if err != nil {
+// 		// notifyWrongImage
+// 	}
+//
+// 	imageSaved, _ := save(imageURL, originalImage)
+//
+// 	c.JSON(200, imageSaved.Id)
+// }
 
-	originalImage, err := requestURL(imageURL)
-	if err != nil {
-		// notifyWrongImage
-	}
-
-	imageSaved := save(imageURL, originalImage)
-
-	c.JSON(200, imageSaved.Id)
-}
-
-func resolve(c *echo.Context) {
-	var image database.Image
-
+func resolve(c *echo.Context) error {
+	var id int64
+	var ids []int64
 	url := c.Request.URL.Query().Get("url")
+	err := DB.Select("id").Table("images").Where("url = ?", url).Pluck("id", &ids).Error
+	log.Println(ids, err)
 
-	err := DB.Table("images").Where("url = ?", url).Find(&image).Error
-	if err != nil {
-		originalImage, err2 := requestURL(url)
-		if err2 != nil {
-			// notifyWrongImage
+	if len(ids) == 0 {
+		requestedImage, requestErr := requestURL(url)
+		if requestErr != nil {
+			return c.NoContent(http.StatusNotFound)
 		}
-		save(url, originalImage)
 
-		c.Response.Write(originalImage)
-		return
+		image, err := save(url, requestedImage)
+
+		if err != nil {
+			return c.String(500, err.Error())
+		}
+
+		id = image.Id
+	} else {
+		id = ids[0]
 	}
 
-	c.Response.Write(image.Data)
+	idS := strconv.Itoa(int(id))
+
+	c.Redirect(http.StatusMovedPermanently, "/cache/"+idS)
+	return nil
 }
 
 func requestURL(url string) ([]byte, error) {
@@ -99,22 +115,26 @@ func requestURL(url string) ([]byte, error) {
 	return body, err
 }
 
-func save(url string, image []byte) database.Image {
-	newimage, err := imageproxy.Transform(image, resizeOptions())
+func save(url string, _image []byte) (*database.Image, error) {
+	image, err := imageproxy.Transform(_image, resizeOptions())
 
 	if err != nil {
-		log.Println(err)
+		return nil, err
 	}
 
-	imageSaved := database.Image{
+	model := database.Image{
 		Url:  url,
-		Data: newimage,
+		Data: image,
 	}
 
 	log.Println("Saving image")
-	log.Println(DB.Table("images").Where("url = ?", url).FirstOrCreate(&imageSaved).Error)
+	err = DB.Table("images").Save(&model).Error
 
-	return imageSaved
+	if err != nil {
+		return nil, err
+	}
+
+	return &model, err
 }
 
 func resizeOptions() imageproxy.Options {
