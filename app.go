@@ -5,7 +5,6 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
 	"strconv"
 	"time"
@@ -20,8 +19,7 @@ import (
 var DB gorm.DB
 
 func cors(rw http.ResponseWriter, r *http.Request) {
-	referer, _ := url.Parse(r.Referer())
-	rw.Header().Set("Access-Control-Allow-Origin", referer.Scheme+"://"+referer.Host)
+	rw.Header().Set("Access-Control-Allow-Origin", "*")
 	rw.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 	rw.Header().Set("Access-Control-Allow-Credentials", "true")
 	rw.Header().Set("Access-Control-Allow-Methods", "DELETE, OPTIONS, GET, POST, PUT")
@@ -35,7 +33,7 @@ func main() {
 	e.Use(mw.Logger)
 	e.Use(cors)
 
-	e.Options("/*", func (*echo.Context) error {
+	e.Options("/*", func(*echo.Context) error {
 		return nil
 	})
 
@@ -54,8 +52,8 @@ func get(c *echo.Context) error {
 		return c.NoContent(http.StatusNotFound)
 	}
 
-	c.Response.Header().Add("Cache-Control", "public, max-age=31536000");
-	c.Response.Header().Add("Last-Modified", image.UpdatedAt.Format(time.RFC822));
+	c.Response.Header().Add("Cache-Control", "public, max-age=31536000")
+	c.Response.Header().Add("Last-Modified", image.UpdatedAt.Format(time.RFC822))
 
 	c.Response.Write(image.Data)
 	return nil
