@@ -35,6 +35,10 @@ func main() {
 	e.Use(mw.Logger)
 	e.Use(cors)
 
+	e.Options("/*", func (*echo.Context) error {
+		return nil
+	})
+
 	e.Get("/cache/:id", get)
 	e.Get("/resolve", resolve)
 
