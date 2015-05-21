@@ -56,6 +56,14 @@ func get(c *echo.Context) error {
 	c.Response.Header().Add("Last-Modified", image.UpdatedAt.Format(time.RFC1123))
 	c.Response.Header().Add("Expires", "Mon, 25 Jun 2030 21:31:12 GMT")
 
+	if ifModifiedSince := c.Request.Header.Get("If-Modified-Since"); ifModifiedSince != "" {
+		ifModifiedSinceTime, err := time.Parse(time.RFC1123, ifModifiedSince)
+		if err == nil && ifModifiedSinceTime.Sub(image.UpdatedAt) == 0 {
+			c.NoContent(304)
+			return nil
+		}
+	}
+
 	c.Response.Write(image.Data)
 	return nil
 }
