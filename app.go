@@ -54,6 +54,7 @@ func get(c *echo.Context) error {
 
 	c.Response.Header().Add("Cache-Control", "public, max-age=31536000")
 	c.Response.Header().Add("Last-Modified", image.UpdatedAt.Format(time.RFC822))
+	c.Response.Header().Add("Expires", "Mon, 25 Jun 2030 21:31:12 GMT")
 
 	c.Response.Write(image.Data)
 	return nil
