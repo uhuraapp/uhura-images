@@ -58,7 +58,8 @@ func get(c *echo.Context) error {
 
 	if ifModifiedSince := c.Request.Header.Get("If-Modified-Since"); ifModifiedSince != "" {
 		ifModifiedSinceTime, err := time.Parse(time.RFC1123, ifModifiedSince)
-		if err == nil && ifModifiedSinceTime.Sub(image.UpdatedAt) == 0 {
+		updatedAt, _ := time.Parse(time.RFC1123, image.UpdatedAt.Format(time.RFC1123))
+		if err == nil && ifModifiedSinceTime.Sub(updatedAt) < 1 {
 			c.NoContent(304)
 			return nil
 		}
