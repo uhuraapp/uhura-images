@@ -85,8 +85,8 @@ func resolve(c *echo.Context) error {
 		image, err := save(url, requestedImage)
 
 		if err != nil {
-			// return c.String(500, err.Error())
-			return c.Response.Write(requestedImage)
+			c.Response.Write(requestedImage)
+			return nil
 		}
 
 		id = image.Id
